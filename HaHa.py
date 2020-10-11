@@ -35,11 +35,7 @@ class PPOMemory:
         self.ptr += 1
 
     def finish_path(self, v):
-        """
-        https://github.com/openai/baselines/blob/master/baselines/ppo1/pposgd_simple.py line 64
-        """
         path_slice = np.arange(self.path_start_idx, self.ptr)
-
         rewards_np = np.array(self.rewards)[path_slice]
         values_np = np.array(self.values)[path_slice]
         values_np_added = np.append(values_np, v)
@@ -112,11 +108,8 @@ class PPO():
         np.random.seed(self.seed)
         print("Using: {} Type: {}".format(self.device,torch.cuda.get_device_name(0)))
         self.actor = Actor(device=self.device,input_dim=self.input_dim, output_dim=self.output_dim,)
-
         self.actor_optimizer = optim.Adam(self.actor.parameters(),lr=self.lr,betas=self.betas)
-
         self.critic = Critic(device=self.device , input_dim=self.input_dim)
-
         self.critic_optimizer = optim.Adam(self.critic.parameters(),lr=self.lr,betas=self.betas)
     @staticmethod
     def load_weight(model):
@@ -145,10 +138,9 @@ class PPO():
         #       wrapup episode
         #       break
         """
-        writer_path = os.path.join('experiment')
+        writer_path = os.path.join('experiments')
         self.writer = SummaryWriter(writer_path)
         self.best_score = 0
-
         # prepare env, memory, stuff
         env = gym.make(self.evn_name)
         env.seed(self.seed)
@@ -371,8 +363,6 @@ class PPO():
     def play(self, num_episodes=1,seed=9999):
         # load policy
         self.load_weight(self.actor)
-        print(self.config['exp_name'])
-        print(self.config)
         env = gym.make(self.evn_name)
         env.seed(seed)
         scores = []
@@ -409,7 +399,6 @@ def init_normal_weights(m):
 class Actor(nn.Module):
     def __init__(self, device, input_dim, output_dim,):
         super(Actor, self).__init__()
-
         self.input_layer = nn.Linear(input_dim, 64)
         self.hidden_layers = nn.ModuleList()
         for idx in range(1):
@@ -424,10 +413,8 @@ class Actor(nn.Module):
         probs = self.forward(states)
         dist = Categorical(probs=probs)
         actions = dist.sample()
-
         # log prob of that action
         log_probs = dist.log_prob(actions)
-
         return actions, log_probs
 
     def select_greedy_action(self, states):
@@ -449,7 +436,6 @@ class Actor(nn.Module):
     def forward(self, state):
         """return action probabilities given state"""
         state = self._format(state)
-
         x = self.input_layer(state)
         x = self.hfn(x)
         for hidden_layer in self.hidden_layers:
@@ -469,7 +455,6 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, device, input_dim):
         super(Critic, self).__init__()
-
         self.input_layer = nn.Linear(input_dim, 64)
         self.hidden_layers = nn.ModuleList()
         for idx in range(1):
@@ -482,7 +467,6 @@ class Critic(nn.Module):
     def forward(self, state):
         """return estimated value given state"""
         state = self._format(state)
-
         x = self.input_layer(state)
         x = self.hfn(x)
         for hidden_layer in self.hidden_layers:
@@ -501,17 +485,13 @@ def prepare_dir(overwrite=False):
 
     exp_dir = os.path.join("experiments")
     checkpoint_dir = os.path.join(exp_dir, "checkpoints")
-    tb_dir = os.path.join(exp_dir, "runs")
     if overwrite:
         shutil.rmtree(exp_dir)
     os.makedirs(exp_dir)
     os.makedirs(checkpoint_dir)
-    os.makedirs(tb_dir)
 
 def main():
-    '''
-    store_true 是指带触发action时为真，不触发则为假
-    '''
+    #store_true 是指带触发action时为真，不触发则为假
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--eval", action="store_true")
     parser.add_argument("--eval_episodes", type=int, default=10)
@@ -529,6 +509,7 @@ def main():
         prepare_dir(overwrite=args.overwrite)
         agent.train()
         print("Done\n")
+        agent.game.close()
 
 if __name__ == "__main__":
     main()
