@@ -21,7 +21,7 @@ other:
 ------------
   Some parameters and calculation methods are being tested and need to be further improved.  
     
-  do not care about it     
+  do not care about 'save.py' or 'useless.py'     
     
   take it easy  
 
