@@ -360,7 +360,7 @@ class PPO():
         self.writer.add_scalar("info/entropy_loss", avg_entropy_losses, self.episode)
 
     # play
-    def play(self, num_episodes=1,seed=9999):
+    def play(self, num_episodes=1,seed=666):
         # load policy
         self.load_weight(self.actor)
         env = gym.make(self.evn_name)
