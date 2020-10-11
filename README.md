@@ -2,6 +2,7 @@
 
 ------------
 train:
+  python HaHa.py  
   --overwrite to train from beginning  
   
 ------------
