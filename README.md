@@ -11,6 +11,11 @@ test:
   --eval to test(defalut test 10 games)  
 
   --seed to change seed otherwise the score together with the environment won't change    
+  
+chart:
+---------
+    put tfenents into path  
+    tensorboard --logdir=path  
 
 other:        
 ------------
