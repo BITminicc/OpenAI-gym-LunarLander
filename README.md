@@ -3,6 +3,7 @@
 train:
 ------------
   python HaHa.py  
+  
   --overwrite to train from beginning  
   
 test:     
@@ -13,8 +14,10 @@ test:
 
 other:        
 ------------
-  Some parameters and calculation methods are being tested and need to be further improved.     
+  Some parameters and calculation methods are being tested and need to be further improved.  
+    
   do not care about it     
+    
   take it easy  
 
 HaHa
