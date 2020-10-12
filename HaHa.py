@@ -3,7 +3,7 @@ import gym
 import shutil
 import argparse
 import numpy as np
-from tqdm import  trange
+from tqdm import trange
 from collections import deque
 
 import torch
@@ -16,15 +16,15 @@ class PPOMemory:
     def __init__(self, gamma, tau):
         self.states = []
         self.actions = []
-        self.rewards = []
-        self.values = []
-        self.logprobs = []
-        self.tdlamret = []
-        self.advants = []
+        self.rewards = []       #环境信息
+        self.values = []        #值函数
+        self.logprobs = []      #对数概率
+        self.tdlamret = []      #advants + values
+        self.advants = []       #优势函数
         self.gamma = gamma
         self.tau = tau
-        self.ptr = 0
-        self.path_start_idx = 0
+        self.ptr = 0                #数组索引
+        self.path_start_idx = 0     #数组索引
 
     def store(self, s, a, r, v, lp):
         self.states.append(s)
@@ -35,6 +35,7 @@ class PPOMemory:
         self.ptr += 1
 
     def finish_path(self, v):
+        #制作一批(片)数据
         path_slice = np.arange(self.path_start_idx, self.ptr)
         rewards_np = np.array(self.rewards)[path_slice]
         values_np = np.array(self.values)[path_slice]
@@ -47,13 +48,11 @@ class PPOMemory:
             delta = rewards_np[t] + self.gamma * values_np_added[t+1] - values_np_added[t]
             gae = delta + self.gamma * self.tau * gae
             advants.insert(0, gae)
-
         self.advants.extend(advants)
 
         advants_np = np.array(advants)
         tdlamret_np = advants_np + values_np
         self.tdlamret.extend(tdlamret_np.tolist())
-
         self.path_start_idx = self.ptr
 
     def reset_storage(self):
@@ -82,26 +81,26 @@ class PPO():
         super(PPO, self).__init__()
         self.seed = 66
         self.average_interval = 100
-        self.gae_tau = 0.95
+        self.gae_tau = 0.95                 #原论文给的合适的参数
         self.gamma = 0.99
         self.max_episodes = 5000
         self.max_steps_per_episode = 300
         self.batch_size = 32
-        self.clip_range = 0.2
-        self.coef_entpen = 0.001
-        self.coef_vf = 0.5
+        self.clip_range = 0.2               #CLIP参数
+        self.coef_entpen = 0.001            #目标函数L中的熵S的参数c2
+        self.coef_vf = 0.5                  #目标函数L中的VF的参数c1
         self.memory_size = 2048
         self.optim_epochs = 4
-        self.terminal_score = 230
+        self.terminal_score = 230           #最终目标得分
         self.evn_name = "LunarLander-v2"
         self.lr = 0.002
         self.betas = [0.9,0.999]
         self.game = gym.make(self.evn_name)
         self.input_dim = self.game.observation_space.shape[0]
         self.output_dim = self.game.action_space.n
-        self.reward_clipping = False
-        self.value_clipping = False
-        self.clipping_gradient = False
+        self.reward_clipping = False        #PPO算法一些增减，是否对一些内容进行限制，是否对数据正则化等等选择
+        self.value_clipping = False         #原论文（2017-PPO）中都没有使用，使用了没有太大的改进
+        self.clipping_gradient = False      #如果不喜欢可以全部忽视
         self.policy_noclip = False
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         torch.manual_seed(self.seed)
@@ -113,22 +112,27 @@ class PPO():
         self.critic_optimizer = optim.Adam(self.critic.parameters(),lr=self.lr,betas=self.betas)
     @staticmethod
     def load_weight(model):
+        #读取模型，此处为静态方法原因在于在本PPO类中会调用，只是类实例化之前的静态变量和函数等问题和RL无关
         weight = torch.load("ep_best.pth")
         model.load_state_dict(weight)
     @staticmethod
     def save_weight(model, weight_name):
+        #保存模型和检查点(如果有)，此处为静态方法原因在于在本PPO类中会调用，只是类实例化之前的静态变量和函数等问题和RL无关
         save_path = os.path.join("experiments", "checkpoints", "ep_{}.pth".format(weight_name))
         weight = model.state_dict()
         torch.save(weight, save_path)
     # train
     def train(self):
         """
+        # 来自于OpenAI-PPO论文算法1，首先Run和Compute(eg:advantage estimates)
         # initialize env, memory
         # foreach episode
         #   foreach timestep
         #     select action
         #     step action
         #     add exp to the memory
+        #如果游戏中结束了或者超过游戏时间，开始训练和更新
+        #(如果不加这一项可能飞行器会在天上一直飘着产生死循环，此处可以形象地理解为：没油了，直接让飞行器坠毁)
         #     if done or timeout or memory_full: update gae & tdlamret
         #     if memory is full
         #       bootstrap value
@@ -210,16 +214,17 @@ class PPO():
             if self.episode % 100 == 0:
                 print("{} - score: {:.1f} +-{:.1f} \t duration: {}".format(self.episode, avg_score, std_score, avg_duration))
 
-            # game-solved condition
-            # if avg_score >= self.config['train']['terminal_score']:
+            # 最终解决问题的模块，如果达到目标直接停止：
+            # if avg_score >= terminal_score:
             #     print("game solved at ep {}".format(self.episode))
             #     self.save_weight(self.actor, self.config['exp_name'], "best")
             #     break
+            #否则训练完全部轮次，此处不需要直接停止，因为时间并不长
             if avg_score >= self.best_score and self.episode >= 200:
                 print("found best model at episode: {}".format(self.episode))
                 self.save_weight(self.actor, "best")
                 self.best_score = avg_score
-
+        #保存模型，包含最后训练结束前的模型last.pth和训练中得分最高的模型best.pth
         self.save_weight(self.actor, "last")
         return self.best_score
 
@@ -229,6 +234,7 @@ class PPO():
         self.optimize_ppo(data)
 
     def prepare_data(self, data):
+        #从PPO-memory中获得一组数据，数据存放在data字典中，然后分别将他们拿出来并转换相应的类型
         states_tensor = torch.from_numpy(np.stack(data['states'])).float() # bsz, 8
         actions_tensor = torch.tensor(data['actions']).long() # bsz
         logpas_tensor = torch.tensor(data['logpas']).float() # bsz
@@ -237,13 +243,13 @@ class PPO():
         values_tensor = torch.tensor(data['values']).float() # bsz
 
         # normalize advant a.k.a atarg
+        # 经过加工处理数据分布会更好，有一定可能产生更好效果，但也可以不进行
         advants_tensor = (advants_tensor - advants_tensor.mean()) / (advants_tensor.std() + 1e-5)
 
         data_tensor = dict(states=states_tensor, actions=actions_tensor, logpas=logpas_tensor,
                     tdlamret=tdlamret_tensor, advants=advants_tensor, values=values_tensor)
-
         return data_tensor
-
+    #建立一个循环的迭代器用于PPO训练，因为每一次循环前进的变量有些多使用zip或for可能有一些麻烦，此处使用此方法和RL无关
     def ppo_iter(self, batch_size, ob, ac, oldpas, atarg, tdlamret, vpredbefore):
         total_size = ob.size(0)
         indices = np.arange(total_size)
@@ -254,10 +260,8 @@ class PPO():
             yield ob[ind], ac[ind], oldpas[ind], atarg[ind], tdlamret[ind], vpredbefore[ind]
 
     def optimize_ppo(self, data):
-
         """
-        https://github.com/openai/baselines/blob/master/baselines/ppo1/pposgd_simple.py line 164
-
+        #此函数为重点，更新PPO-agent类，更新的流程如下：（前面两三个函数从某种程度上说为此函数进行服务）
         # get data from the memory
         # prepare dataloader
         # foreach optim_epochs
@@ -289,6 +293,7 @@ class PPO():
                 ob_b, ac_b, old_logpas_b, atarg_b, vtarg_b, old_vpred_b = batch
 
                 # policy loss
+                #计算新旧策略的比率
                 cur_logpas, cur_entropies = self.actor.get_predictions(ob_b, ac_b)
                 ratio = torch.exp(cur_logpas - old_logpas_b)
 
@@ -360,7 +365,7 @@ class PPO():
         self.writer.add_scalar("info/entropy_loss", avg_entropy_losses, self.episode)
 
     # play
-    def play(self, num_episodes=1,seed=666):
+    def play(self, num_episodes=1,seed=9999):
         # load policy
         self.load_weight(self.actor)
         env = gym.make(self.evn_name)
@@ -387,7 +392,7 @@ class PPO():
                     scores.append(episode_score)
                     break
         avg_score = np.mean(scores)
-        print("Average score {} on {} games".format(avg_score, num_episodes))
+        print("RESULT: Average score {:.3f} on {} {} games".format(avg_score, num_episodes,self.evn_name))
         env.close()
 
 #初始化
@@ -482,7 +487,7 @@ class Critic(nn.Module):
         return state
 
 def prepare_dir(overwrite=False):
-
+    #实验结果存储在相应文件夹中，此处如果没有该文件夹就新建文件夹，如果有默认不覆盖以免误操作，也可以通过参数进行覆盖
     exp_dir = os.path.join("experiments")
     checkpoint_dir = os.path.join(exp_dir, "checkpoints")
     if overwrite:
@@ -500,7 +505,6 @@ def main():
     args = parser.parse_args()
 
     agent = PPO()
-
     if args.eval:
         """play mode"""
         agent.play(num_episodes=args.eval_episodes, seed=args.seed)
@@ -513,3 +517,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
